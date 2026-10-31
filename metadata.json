@@ -1,0 +1,6 @@
+{
+  "name": "GMK Player",
+  "description": "Universal media player, Google Files-style browser, and ZArchiver-grade archive manager for Android by GMK Studios.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
