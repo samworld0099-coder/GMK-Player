@@ -21,13 +21,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Restore debug keystore
+      - name: Ensure consistent debug keystore
         run: |
-          if [ -f "debug.keystore.base64" ]; then
+          if [ ! -f "debug.keystore" ] && [ -f "debug.keystore.base64" ]; then
+            echo "Restoring canonical debug.keystore from debug.keystore.base64"
             base64 -d debug.keystore.base64 > debug.keystore
-          elif [ ! -f "debug.keystore" ]; then
-            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
+          if [ ! -f "debug.keystore" ]; then
+            echo "Error: Canonical debug.keystore is missing. Refusing to generate a random key to avoid signature mismatch."
+            exit 1
+          fi
+          echo "Keystore verified successfully."
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
