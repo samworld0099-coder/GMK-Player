@@ -67,6 +67,19 @@ data class VideoPlayerUiState(
     val showAudioDialog: Boolean = false,
     val showSubtitleDialog: Boolean = false,
     val showResizeDialog: Boolean = false,
+    val showSleepTimerDialog: Boolean = false,
+    val showJumpToTimeDialog: Boolean = false,
+    val showEqualizerDialog: Boolean = false,
+    val sleepTimerMinutesRemaining: Int? = null,
+    val isRepeatEnabled: Boolean = false,
+    val showThreeDotMenu: Boolean = false,
+    val showAudioSubtitlePanel: Boolean = false,
+    val isHardwareDecoding: Boolean = true,
+    val decodingFallbackAttempted: Boolean = false,
+    val failedCodecName: String? = null,
+    val isAudioOnlyFallback: Boolean = false,
+    val mediaMimeType: String? = null,
     val showResumePrompt: Boolean = false,
-    val savedResumePositionMs: Long = 0L
+    val savedResumePositionMs: Long = 0L,
+    val playerSessionId: Long = 0L
 )

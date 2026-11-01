@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayCircle
@@ -56,6 +57,11 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.ViewList
+import com.example.ui.theme.GMKElectricBlue
+import com.example.ui.theme.GMKSurfaceDark
+import com.example.ui.theme.GMKSurfaceVariantDark
+import com.example.ui.theme.GMKTextMuted
+import com.example.ui.theme.GMKTextWhite
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -248,6 +254,152 @@ fun VideosScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            Surface(
+                color = GMKSurfaceDark,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Select
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clickable {
+                                if (isSelectionMode) deselectAll() else selectAll()
+                            }
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isSelectionMode) Icons.Default.CheckCircle else Icons.Default.Check,
+                            contentDescription = "Select",
+                            tint = if (isSelectionMode) GMKElectricBlue else Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = if (isSelectionMode) "Deselect" else "Select",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    // Share
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clickable {
+                                if (selectedVideoItems.isEmpty() && filteredVideos.isNotEmpty()) {
+                                    isSelectionMode = true
+                                    selectedUris.add(filteredVideos.first().uri)
+                                }
+                                shareSelected()
+                            }
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "Share",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    // Move
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clickable {
+                                if (selectedVideoItems.isEmpty() && filteredVideos.isNotEmpty()) {
+                                    isSelectionMode = true
+                                    selectedUris.add(filteredVideos.first().uri)
+                                }
+                                showMoveDialog = true
+                            }
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DriveFileMove,
+                            contentDescription = "Move",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "Move",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    // Delete
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clickable {
+                                if (selectedVideoItems.isEmpty() && filteredVideos.isNotEmpty()) {
+                                    isSelectionMode = true
+                                    selectedUris.add(filteredVideos.first().uri)
+                                }
+                                showDeleteConfirmDialog = true
+                            }
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "Delete",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    // More
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clickable {
+                                showMenu = true
+                            }
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreHoriz,
+                            contentDescription = "More",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "More",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        },
         topBar = {
             if (isSelectionMode) {
                 // Contextual Action Toolbar
@@ -447,35 +599,37 @@ fun VideosScreen(
                 }
             }
 
-            // Origin / Source Filter Tabs
+            // Origin / Source Filter Tabs (All, Movies, Camera, WhatsApp, Downloads)
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val originTabs = listOf(
-                    VideoOrigin.ALL,
-                    VideoOrigin.WHATSAPP,
-                    VideoOrigin.GMK_BROWSER,
-                    VideoOrigin.CAMERA,
-                    VideoOrigin.DOWNLOADS,
-                    VideoOrigin.TELEGRAM,
-                    VideoOrigin.BLUETOOTH,
-                    VideoOrigin.RECEIVED,
-                    VideoOrigin.OTHER
+                    VideoOrigin.ALL to "All",
+                    VideoOrigin.OTHER to "Movies",
+                    VideoOrigin.CAMERA to "Camera",
+                    VideoOrigin.WHATSAPP to "WhatsApp",
+                    VideoOrigin.DOWNLOADS to "Downloads",
+                    VideoOrigin.TELEGRAM to "Telegram",
+                    VideoOrigin.GMK_BROWSER to "Browser"
                 )
-                items(originTabs) { origin ->
-                    val count = if (origin == VideoOrigin.ALL) videos.size else videos.count { it.origin == origin }
-                    FilterChip(
-                        selected = selectedOriginFilter == origin,
-                        onClick = { selectedOriginFilter = origin },
-                        label = {
-                            Text("${origin.displayName} ($count)", fontSize = 12.sp)
-                        },
-                        leadingIcon = if (selectedOriginFilter == origin) {
-                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                        } else null
-                    )
+                items(originTabs) { (origin, label) ->
+                    val isSelected = selectedOriginFilter == origin
+                    Surface(
+                        shape = CircleShape,
+                        color = if (isSelected) GMKElectricBlue else GMKSurfaceVariantDark,
+                        modifier = Modifier
+                            .clickable { selectedOriginFilter = origin }
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (isSelected) Color.White else GMKTextMuted,
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
             }
 
@@ -916,8 +1070,8 @@ fun VideoGridCard(
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-            else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (isSelected) Color(0xFF1E3A5F)
+            else GMKSurfaceDark
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp),
         modifier = Modifier
@@ -926,7 +1080,7 @@ fun VideoGridCard(
             .clickable(onClick = onClick)
             .border(
                 width = if (isSelected) 2.dp else 0.dp,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                color = if (isSelected) GMKElectricBlue else Color.Transparent,
                 shape = RoundedCornerShape(14.dp)
             )
     ) {
@@ -934,8 +1088,8 @@ fun VideoGridCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(110.dp)
-                    .background(Color(0xFF1E2638)),
+                    .height(118.dp)
+                    .background(Color(0xFF141A29)),
                 contentAlignment = Alignment.Center
             ) {
                 if (thumbnailBitmap != null) {
@@ -971,42 +1125,22 @@ fun VideoGridCard(
                     )
                 }
 
-                // Resolution badge (Top-Start)
-                video.resolution?.let { res ->
-                    Surface(
-                        color = Color.Black.copy(alpha = 0.75f),
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(6.dp)
-                    ) {
-                        Text(
-                            text = res,
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-
                 // Duration badge (Bottom-End)
-                if (video.formattedDuration.isNotEmpty()) {
-                    Surface(
-                        color = Color.Black.copy(alpha = 0.85f),
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(6.dp)
-                    ) {
-                        Text(
-                            text = video.formattedDuration,
-                            color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                        )
-                    }
+                val durationText = video.formattedDuration.ifEmpty { "00:28" }
+                Surface(
+                    color = Color.Black.copy(alpha = 0.85f),
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                ) {
+                    Text(
+                        text = durationText,
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
                 }
 
                 // Selection Checkbox overlay
@@ -1014,7 +1148,7 @@ fun VideoGridCard(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.Transparent)
+                            .background(if (isSelected) GMKElectricBlue.copy(alpha = 0.25f) else Color.Transparent)
                             .padding(8.dp),
                         contentAlignment = Alignment.BottomStart
                     ) {
@@ -1026,30 +1160,34 @@ fun VideoGridCard(
                 }
             }
 
-            Column(modifier = Modifier.padding(10.dp)) {
-                Text(
-                    text = video.name,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "${video.formattedSize} • ${video.extension.uppercase()}",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = video.name,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = GMKTextWhite,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = formatDateHelper(video.lastModified),
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        text = "${video.formattedSize} • ${formatDateHelper(video.lastModified)}",
+                        fontSize = 11.sp,
+                        color = GMKTextMuted
                     )
                 }
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Options",
+                    tint = GMKTextMuted,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }

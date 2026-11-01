@@ -349,13 +349,18 @@ fun WebBrowserScreen(
 
     fun startDownload(source: DetectedMediaSource, customName: String) {
         val finalName = if (customName.isNotBlank()) customName else URLUtil.guessFileName(source.url, null, source.mimeType)
-        scope.launch {
-            snackbarHostState.showSnackbar("Download queued: $finalName")
+        val userAgent = webViewRef?.settings?.userAgentString
+        // Immediately start download on background IO dispatcher without blocking UI thread
+        scope.launch(Dispatchers.IO) {
             downloadEngine.enqueueDownload(
                 url = source.url,
                 suggestedFileName = finalName,
-                userAgent = webViewRef?.settings?.userAgentString
+                userAgent = userAgent
             )
+        }
+        // Show snackbar feedback concurrently
+        scope.launch {
+            snackbarHostState.showSnackbar("Download queued: $finalName")
         }
     }
 
@@ -1186,10 +1191,16 @@ fun WebBrowserScreen(
                 ) {
                     Text("Tabs (${tabs.size})", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     Button(onClick = {
-                        val newTab = BrowserTab(id = "tab_${System.currentTimeMillis()}", title = "Google", url = "https://www.google.com")
-                        tabs.add(newTab)
-                        currentTabIndex = tabs.size - 1
-                        navigateTo("https://www.google.com")
+                        if (tabs.size < 15) {
+                            val newTab = BrowserTab(id = "tab_${System.currentTimeMillis()}", title = "Google", url = "https://www.google.com")
+                            tabs.add(newTab)
+                            currentTabIndex = tabs.size - 1
+                            navigateTo("https://www.google.com")
+                        } else {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Maximum tab limit (15) reached. Close unused tabs to save memory.")
+                            }
+                        }
                         showTabSheet = false
                     }) {
                         Icon(Icons.Default.Add, contentDescription = null)
@@ -1207,8 +1218,11 @@ fun WebBrowserScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    currentTabIndex = tabs.indexOf(tab)
-                                    navigateTo(tab.url)
+                                    val newIdx = tabs.indexOf(tab)
+                                    if (newIdx != currentTabIndex || webViewRef?.url != tab.url) {
+                                        currentTabIndex = newIdx
+                                        navigateTo(tab.url)
+                                    }
                                     showTabSheet = false
                                 }
                                 .padding(vertical = 8.dp),

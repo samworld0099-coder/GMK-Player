@@ -183,6 +183,7 @@ fun SendReceiveScreen(
 
     // Receiver server state
     var receiverServerJob by remember { mutableStateOf<Job?>(null) }
+    var activeServerSocket by remember { mutableStateOf<ServerSocket?>(null) }
     var incomingApprovalPending by remember { mutableStateOf(false) }
     var incomingSenderName by remember { mutableStateOf("") }
     var incomingFileCount by remember { mutableIntStateOf(0) }
@@ -234,11 +235,17 @@ fun SendReceiveScreen(
     DisposableEffect(Unit) {
         onDispose {
             TransferEngine.isCancelled.set(true)
+            try {
+                activeServerSocket?.close()
+            } catch (_: Exception) {}
             receiverServerJob?.cancel()
         }
     }
 
     fun startReceiverServer() {
+        try {
+            activeServerSocket?.close()
+        } catch (_: Exception) {}
         receiverServerJob?.cancel()
         TransferEngine.isCancelled.set(false)
         TransferEngine.isPaused.set(false)
@@ -246,7 +253,11 @@ fun SendReceiveScreen(
         receiverServerJob = scope.launch(Dispatchers.IO) {
             var serverSocket: ServerSocket? = null
             try {
-                serverSocket = ServerSocket(TransferEngine.DEFAULT_PORT)
+                serverSocket = ServerSocket().apply {
+                    reuseAddress = true
+                    bind(java.net.InetSocketAddress(TransferEngine.DEFAULT_PORT))
+                }
+                activeServerSocket = serverSocket
                 withContext(Dispatchers.Main) {
                     transferStatusMessage = "Receiver listening on $localIp:${TransferEngine.DEFAULT_PORT}"
                 }
@@ -407,6 +418,10 @@ fun SendReceiveScreen(
                 }
             }
             TransferScreenMode.RECEIVE_WAITING -> {
+                TransferEngine.isCancelled.set(true)
+                try {
+                    activeServerSocket?.close()
+                } catch (_: Exception) {}
                 receiverServerJob?.cancel()
                 currentMode = TransferScreenMode.MAIN
             }
@@ -592,6 +607,10 @@ fun SendReceiveScreen(
                         pin = pairingPin,
                         statusMessage = transferStatusMessage,
                         onCancel = {
+                            TransferEngine.isCancelled.set(true)
+                            try {
+                                activeServerSocket?.close()
+                            } catch (_: Exception) {}
                             receiverServerJob?.cancel()
                             currentMode = TransferScreenMode.MAIN
                         }

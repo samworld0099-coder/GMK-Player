@@ -31,7 +31,11 @@ data class AudioPlayerUiState(
     val isShuffle: Boolean = false,
     val repeatMode: RepeatMode = RepeatMode.OFF,
     val isFavorite: Boolean = false,
-    val isExpandedPlayerVisible: Boolean = false
+    val isExpandedPlayerVisible: Boolean = false,
+    val playbackSpeed: Float = 1.0f,
+    val sleepTimerMinutes: Int? = null,
+    val showLyrics: Boolean = false,
+    val activeTab: String = "Songs"
 )
 
 class AudioPlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -159,6 +163,32 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun setExpandedPlayerVisible(visible: Boolean) {
         _uiState.update { it.copy(isExpandedPlayerVisible = visible) }
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        player?.playbackParameters = androidx.media3.common.PlaybackParameters(speed)
+        _uiState.update { it.copy(playbackSpeed = speed) }
+    }
+
+    private var sleepTimerJob: Job? = null
+    fun setSleepTimer(minutes: Int?) {
+        sleepTimerJob?.cancel()
+        _uiState.update { it.copy(sleepTimerMinutes = minutes) }
+        if (minutes != null && minutes > 0) {
+            sleepTimerJob = viewModelScope.launch {
+                delay(minutes * 60 * 1000L)
+                player?.pause()
+                _uiState.update { it.copy(sleepTimerMinutes = null) }
+            }
+        }
+    }
+
+    fun toggleLyrics(show: Boolean) {
+        _uiState.update { it.copy(showLyrics = show) }
+    }
+
+    fun setActiveTab(tab: String) {
+        _uiState.update { it.copy(activeTab = tab) }
     }
 
     private fun handleTrackEnded() {

@@ -166,12 +166,66 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "Dark Mode",
+                            text = "Cinematic Dark (Default)",
                             fontWeight = FontWeight.Medium,
                             fontSize = 15.sp
                         )
                         Text(
-                            text = "OLED-friendly carbon dark and neutral surface",
+                            text = "Deep navy cinematic background with electric blue accents",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onThemeChanged(AppThemeMode.BLACK) }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = currentTheme == AppThemeMode.BLACK,
+                        onClick = { onThemeChanged(AppThemeMode.BLACK) },
+                        modifier = Modifier.testTag("theme_radio_black")
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "AMOLED Pure Black",
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = "True pitch-black #000000 pixels for maximum battery savings",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onThemeChanged(AppThemeMode.BLUE_ACCENT) }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = currentTheme == AppThemeMode.BLUE_ACCENT,
+                        onClick = { onThemeChanged(AppThemeMode.BLUE_ACCENT) },
+                        modifier = Modifier.testTag("theme_radio_blue")
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "Electric Royal Blue",
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = "Royal blue glowing surfaces inspired by GMK signature design",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

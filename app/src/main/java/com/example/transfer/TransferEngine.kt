@@ -149,7 +149,8 @@ object TransferEngine {
         var socket: Socket? = null
         try {
             onStatusChange(TransferStatus.CONNECTING, "Connecting to receiver at $serverIp:$port...")
-            socket = Socket(serverIp, port)
+            socket = Socket()
+            socket.connect(java.net.InetSocketAddress(serverIp, port), 8000)
             socket.soTimeout = 45000 // 45 seconds read timeout
             socket.tcpNoDelay = true
 

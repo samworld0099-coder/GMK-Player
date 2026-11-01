@@ -21,6 +21,11 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
+import androidx.media3.exoplayer.mediacodec.MediaCodecDecoderException
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
+import androidx.media3.exoplayer.mediacodec.MediaCodecRenderer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.example.data.db.AppDatabase
 import com.example.data.repository.MediaRepository
@@ -50,27 +55,63 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var doubleTapIndicatorJob: Job? = null
     private var indicatorJob: Job? = null
 
+    private val failedCodecs = mutableSetOf<String>()
+    private var isSoftwareFallbackMode = false
+
     fun getPlayer(): ExoPlayer {
         return exoPlayer ?: createPlayer().also { exoPlayer = it }
     }
 
-    private fun createPlayer(preferSoftwareFallback: Boolean = false): ExoPlayer {
+    private fun createPlayer(forceSoftwareFallback: Boolean = false): ExoPlayer {
         val renderersFactory = DefaultRenderersFactory(getApplication()).apply {
-            // Prioritize device hardware decoders (MediaCodec) for 60fps smooth playback
-            setExtensionRendererMode(
-                if (preferSoftwareFallback) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-                else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
-            )
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             setEnableDecoderFallback(true)
+
+            // Dynamic MediaCodecSelector providing real hardware and software decoding paths
+            val customSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+                val allDecoders = try {
+                    MediaCodecUtil.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+
+                if (forceSoftwareFallback) {
+                    // True software decoding fallback:
+                    // 1. Exclude hardware decoders that previously failed
+                    // 2. Strongly prioritize Google Codec2/OMX software decoders (c2.android.*, OMX.google.*, softwareOnly = true)
+                    val available = allDecoders.filter { it.name !in failedCodecs }
+                    available.sortedWith(
+                        compareByDescending<MediaCodecInfo> { info ->
+                            info.softwareOnly ||
+                            !info.hardwareAccelerated ||
+                            info.name.startsWith("c2.android.") ||
+                            info.name.startsWith("OMX.google.") ||
+                            info.name.contains(".sw.", ignoreCase = true) ||
+                            info.name.contains("software", ignoreCase = true)
+                        }
+                    )
+                } else {
+                    // Standard hardware-accelerated playback:
+                    // Filter out any decoders that have already failed in this session
+                    val nonFailed = allDecoders.filter { it.name !in failedCodecs }
+                    if (nonFailed.isNotEmpty()) nonFailed else allDecoders
+                }
+            }
+
+            setMediaCodecSelector(customSelector)
         }
 
         val trackSelector = DefaultTrackSelector(getApplication()).apply {
-            setParameters(
-                buildUponParameters()
-                    .setExceedRendererCapabilitiesIfNecessary(true)
-                    .setAllowVideoMixedMimeTypeAdaptiveness(true)
-                    .setAllowVideoNonSeamlessAdaptiveness(true)
-            )
+            val params = buildUponParameters()
+                .setExceedRendererCapabilitiesIfNecessary(true)
+                .setAllowVideoMixedMimeTypeAdaptiveness(true)
+                .setAllowVideoNonSeamlessAdaptiveness(true)
+
+            if (forceSoftwareFallback) {
+                // In software fallback mode: disable hardware tunneling and display constraints
+                params.setTunnelingEnabled(false)
+            }
+            setParameters(params)
         }
 
         val loadControl = DefaultLoadControl.Builder()
@@ -152,27 +193,72 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                val errorMessage = when (error.errorCode) {
-                    PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ->
-                        "Hardware decoder initialization failed. The video format or resolution (e.g. 4K/HEVC/AV1) may exceed this device's hardware decoder capabilities."
-                    PlaybackException.ERROR_CODE_DECODING_FAILED ->
-                        "Playback error: Stream decoding failed. Codec profile or bit depth may require software decoding."
-                    PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ->
-                        "Media file was not found or is no longer accessible on storage."
-                    PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ->
-                        "Unsupported container format. GMK Player supports MP4, MKV, WebM, MOV, AVI, TS, and MPEG."
-                    PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW ->
-                        "Playback buffer underrun. Re-buffering stream."
-                    else ->
-                        error.localizedMessage ?: "Playback encountered an unexpected error (${error.errorCodeName})"
+                var failedCodec: String? = null
+                var cause: Throwable? = error.cause
+                while (cause != null) {
+                    if (cause is MediaCodecDecoderException) {
+                        failedCodec = cause.codecInfo?.name
+                        break
+                    } else if (cause is MediaCodecRenderer.DecoderInitializationException) {
+                        failedCodec = cause.codecInfo?.name
+                        break
+                    }
+                    cause = cause.cause
                 }
-                _uiState.update { it.copy(playbackError = errorMessage, isPlaying = false) }
+                if (failedCodec != null) {
+                    failedCodecs.add(failedCodec)
+                }
+
+                val isDecoderFailure = error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
+                        error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED ||
+                        error.errorCode == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED
+
+                val errorMessage: String
+                if (isDecoderFailure) {
+                    val codecTag = failedCodec?.let { " ($it)" } ?: ""
+                    if (!_uiState.value.decodingFallbackAttempted) {
+                        errorMessage = "Playback error: Stream decoding failed with hardware decoder$codecTag. Codec profile or bit depth may require software decoding."
+                    } else {
+                        errorMessage = "Playback error: Stream decoding failed$codecTag. Neither hardware nor software decoders on this device can decode this stream. You can play the audio track in background or choose another video."
+                    }
+                } else {
+                    errorMessage = when (error.errorCode) {
+                        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ->
+                            "Media file was not found or is no longer accessible on storage."
+                        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ->
+                            "Unsupported container format. GMK Player supports MP4, MKV, WebM, MOV, AVI, TS, and MPEG."
+                        PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW ->
+                            "Playback buffer underrun. Re-buffering stream."
+                        else ->
+                            error.localizedMessage ?: "Playback encountered an unexpected error (${error.errorCodeName})"
+                    }
+                }
+
+                _uiState.update {
+                    it.copy(
+                        playbackError = errorMessage,
+                        isPlaying = false,
+                        failedCodecName = failedCodec
+                    )
+                }
             }
         })
         return player
     }
 
     fun initialize(uri: Uri, title: String, startPositionMs: Long? = null) {
+        if (!isSoftwareFallbackMode) {
+            failedCodecs.clear()
+            _uiState.update {
+                it.copy(
+                    isHardwareDecoding = true,
+                    decodingFallbackAttempted = false,
+                    failedCodecName = null,
+                    isAudioOnlyFallback = false
+                )
+            }
+        }
+
         val player = getPlayer()
         val uriStr = uri.toString()
         _uiState.update {
@@ -230,13 +316,55 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun retryWithFallback() {
         val currentUriStr = _uiState.value.uriString
         val currentTitle = _uiState.value.title
-        val savedPos = _uiState.value.currentPositionMs
+        val savedPos = _uiState.value.currentPositionMs.coerceAtLeast(exoPlayer?.currentPosition ?: 0L)
+
+        if (_uiState.value.decodingFallbackAttempted) {
+            // Software fallback already attempted and failed. Do not loop.
+            return
+        }
+
         if (currentUriStr.isNotEmpty()) {
-            exoPlayer?.release()
-            exoPlayer = createPlayer(preferSoftwareFallback = true)
+            isSoftwareFallbackMode = true
+            val newSessionId = System.currentTimeMillis()
+            _uiState.update {
+                it.copy(
+                    isHardwareDecoding = false,
+                    decodingFallbackAttempted = true,
+                    playbackError = null,
+                    playerSessionId = newSessionId
+                )
+            }
+            try {
+                exoPlayer?.stop()
+                exoPlayer?.release()
+            } catch (_: Exception) {}
+            exoPlayer = createPlayer(forceSoftwareFallback = true)
             val uri = Uri.parse(currentUriStr)
             initialize(uri, currentTitle, startPositionMs = savedPos)
         }
+    }
+
+    fun playAudioOnly() {
+        val player = exoPlayer ?: return
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+            .build()
+        _uiState.update {
+            it.copy(
+                isAudioOnlyFallback = true,
+                playbackError = null
+            )
+        }
+        player.play()
+    }
+
+    fun resumeVideoRendering() {
+        val player = exoPlayer ?: return
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+            .build()
+        _uiState.update { it.copy(isAudioOnlyFallback = false) }
+        player.play()
     }
 
     fun dismissError() {
@@ -256,6 +384,8 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun updateTracks(player: ExoPlayer) {
         val audioList = mutableListOf<TrackInfo>()
         val subList = mutableListOf<TrackInfo>()
+        val rawTitle = _uiState.value.title
+        val cleanName = if (rawTitle.contains('.')) rawTitle.substringBeforeLast('.') else rawTitle
 
         val tracks = player.currentTracks
         for (groupIndex in 0 until tracks.groups.size) {
@@ -263,10 +393,18 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             for (trackIndex in 0 until group.length) {
                 val format = group.getTrackFormat(trackIndex)
                 val isSelected = group.isTrackSelected(trackIndex)
-                val lang = format.language?.let { Locale(it).displayLanguage } ?: format.language
+                val lang = format.language?.let {
+                    try { Locale(it).displayLanguage } catch (_: Exception) { it }
+                } ?: format.language
 
                 if (group.type == C.TRACK_TYPE_AUDIO) {
-                    val label = format.label ?: "Audio ${audioList.size + 1} (${lang ?: "Unknown"}, ${format.channelCount}ch)"
+                    val langSuffix = if (!lang.isNullOrBlank()) " - [$lang]" else " - [Audio ${audioList.size + 1}]"
+                    val role = when {
+                        (format.roleFlags and C.ROLE_FLAG_DUB) != 0 -> "[Dubbed] "
+                        (format.roleFlags and C.ROLE_FLAG_COMMENTARY) != 0 -> "[Commentary] "
+                        else -> ""
+                    }
+                    val label = format.label ?: "$role$cleanName$langSuffix"
                     audioList.add(
                         TrackInfo(
                             id = "audio_${groupIndex}_$trackIndex",
@@ -278,7 +416,13 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         )
                     )
                 } else if (group.type == C.TRACK_TYPE_TEXT) {
-                    val label = format.label ?: "Subtitle ${subList.size + 1} (${lang ?: "Unknown"})"
+                    val tag = when {
+                        (format.roleFlags and C.ROLE_FLAG_CAPTION) != 0 -> "[SDH] "
+                        (format.selectionFlags and C.SELECTION_FLAG_FORCED) != 0 -> "[Forced] "
+                        else -> ""
+                    }
+                    val langSuffix = if (!lang.isNullOrBlank()) " - [$lang]" else " - [Subtitle ${subList.size + 1}]"
+                    val label = format.label ?: "$tag$cleanName$langSuffix"
                     subList.add(
                         TrackInfo(
                             id = "sub_${groupIndex}_$trackIndex",
@@ -295,18 +439,25 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update { it.copy(audioTracks = audioList, subtitleTracks = subList) }
     }
 
-    fun selectAudioTrack(track: TrackInfo) {
+    fun selectAudioTrack(track: TrackInfo?) {
         val player = exoPlayer ?: return
-        val tracks = player.currentTracks
-        if (track.groupIndex < tracks.groups.size) {
-            val group = tracks.groups[track.groupIndex]
-            val override = TrackSelectionOverride(group.mediaTrackGroup, track.index)
+        if (track == null) {
             player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
                 .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
-                .addOverride(override)
+                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
                 .build()
+        } else {
+            val tracks = player.currentTracks
+            if (track.groupIndex < tracks.groups.size) {
+                val group = tracks.groups[track.groupIndex]
+                val override = TrackSelectionOverride(group.mediaTrackGroup, track.index)
+                player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                    .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                    .addOverride(override)
+                    .build()
+            }
         }
-        _uiState.update { it.copy(showAudioDialog = false) }
     }
 
     fun selectSubtitleTrack(track: TrackInfo?) {
@@ -316,7 +467,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                 .build()
-            _uiState.update { it.copy(isSubtitleEnabled = false, showSubtitleDialog = false) }
+            _uiState.update { it.copy(isSubtitleEnabled = false) }
         } else {
             val tracks = player.currentTracks
             if (track.groupIndex < tracks.groups.size) {
@@ -328,7 +479,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     .addOverride(override)
                     .build()
             }
-            _uiState.update { it.copy(isSubtitleEnabled = true, showSubtitleDialog = false) }
+            _uiState.update { it.copy(isSubtitleEnabled = true) }
         }
     }
 
@@ -535,13 +686,57 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         showGestureIndicator(text)
     }
 
+    private var sleepTimerJob: Job? = null
+
+    fun toggleRepeat() {
+        val newRepeat = !_uiState.value.isRepeatEnabled
+        exoPlayer?.repeatMode = if (newRepeat) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        _uiState.update { it.copy(isRepeatEnabled = newRepeat) }
+        showGestureIndicator(if (newRepeat) "Loop: ON" else "Loop: OFF")
+    }
+
+    fun setSleepTimer(minutes: Int?) {
+        sleepTimerJob?.cancel()
+        if (minutes == null || minutes <= 0) {
+            _uiState.update { it.copy(sleepTimerMinutesRemaining = null, showSleepTimerDialog = false) }
+            showGestureIndicator("Sleep timer off")
+            return
+        }
+        _uiState.update { it.copy(sleepTimerMinutesRemaining = minutes, showSleepTimerDialog = false) }
+        showGestureIndicator("Sleep timer: $minutes min")
+        sleepTimerJob = viewModelScope.launch {
+            delay(minutes * 60 * 1000L)
+            pausePlayback()
+            _uiState.update { it.copy(sleepTimerMinutesRemaining = null) }
+        }
+    }
+
+    fun jumpToTime(minutes: Long, seconds: Long) {
+        val targetMs = (minutes * 60 + seconds) * 1000L
+        seekTo(targetMs)
+        _uiState.update { it.copy(showJumpToTimeDialog = false) }
+    }
+
+    fun toggleThreeDotMenu() {
+        val current = _uiState.value.showThreeDotMenu
+        _uiState.update { it.copy(showThreeDotMenu = !current, showAudioSubtitlePanel = false) }
+    }
+
+    fun toggleAudioSubtitlePanel() {
+        val current = _uiState.value.showAudioSubtitlePanel
+        _uiState.update { it.copy(showAudioSubtitlePanel = !current, showThreeDotMenu = false) }
+    }
+
     fun openDialog(dialog: String) {
         _uiState.update {
             when (dialog) {
-                "speed" -> it.copy(showSpeedDialog = true)
-                "audio" -> it.copy(showAudioDialog = true)
-                "subtitle" -> it.copy(showSubtitleDialog = true)
-                "resize" -> it.copy(showResizeDialog = true)
+                "speed" -> it.copy(showSpeedDialog = true, showThreeDotMenu = false)
+                "audio" -> it.copy(showAudioSubtitlePanel = true, showThreeDotMenu = false)
+                "subtitle" -> it.copy(showAudioSubtitlePanel = true, showThreeDotMenu = false)
+                "resize" -> it.copy(showResizeDialog = true, showThreeDotMenu = false)
+                "sleep" -> it.copy(showSleepTimerDialog = true, showThreeDotMenu = false)
+                "jump" -> it.copy(showJumpToTimeDialog = true, showThreeDotMenu = false)
+                "equalizer" -> it.copy(showEqualizerDialog = true, showThreeDotMenu = false)
                 else -> it
             }
         }
@@ -553,7 +748,12 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 showSpeedDialog = false,
                 showAudioDialog = false,
                 showSubtitleDialog = false,
-                showResizeDialog = false
+                showResizeDialog = false,
+                showSleepTimerDialog = false,
+                showJumpToTimeDialog = false,
+                showEqualizerDialog = false,
+                showThreeDotMenu = false,
+                showAudioSubtitlePanel = false
             )
         }
     }

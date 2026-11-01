@@ -14,7 +14,9 @@ import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,30 +35,45 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.SpeakerNotes
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +81,11 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.VerticalDivider
+import com.example.ui.theme.GMKElectricBlue
+import com.example.ui.theme.GMKSurfaceDark
+import com.example.ui.theme.GMKTextMuted
+import com.example.ui.theme.GMKTextWhite
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -70,6 +93,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -178,37 +202,39 @@ fun VideoPlayerScreen(
                 .rotate(uiState.rotationDegrees.toFloat()),
             contentAlignment = Alignment.Center
         ) {
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        player = viewModel.getPlayer()
-                        useController = false // Custom VLC-style Compose HUD
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                        setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
-                    }
-                },
-                update = { playerView ->
-                    val currentPlayer = viewModel.getPlayer()
-                    if (playerView.player != currentPlayer) {
-                        playerView.player = currentPlayer
-                    }
-                    val targetMode = when (uiState.resizeMode) {
-                        ResizeMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        ResizeMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-                        ResizeMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                        ResizeMode.FIXED_WIDTH -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
-                        ResizeMode.FIXED_HEIGHT -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
-                        ResizeMode.ORIGINAL -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    }
-                    if (playerView.resizeMode != targetMode) {
-                        playerView.resizeMode = targetMode
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+            key(uiState.playerSessionId) {
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            player = viewModel.getPlayer()
+                            useController = false // Custom VLC-style Compose HUD
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        }
+                    },
+                    update = { playerView ->
+                        val currentPlayer = viewModel.getPlayer()
+                        if (playerView.player != currentPlayer) {
+                            playerView.player = currentPlayer
+                        }
+                        val targetMode = when (uiState.resizeMode) {
+                            ResizeMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            ResizeMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                            ResizeMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                            ResizeMode.FIXED_WIDTH -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
+                            ResizeMode.FIXED_HEIGHT -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
+                            ResizeMode.ORIGINAL -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        }
+                        if (playerView.resizeMode != targetMode) {
+                            playerView.resizeMode = targetMode
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
         // VLC Gesture Detector Overlay
@@ -400,7 +426,7 @@ fun VideoPlayerScreen(
             }
         }
 
-        // VLC Fullscreen Controls Overlay
+        // Fullscreen Controls Overlay matching Phase 2 Reference Specifications
         AnimatedVisibility(
             visible = uiState.isControlsVisible,
             enter = fadeIn(),
@@ -410,9 +436,9 @@ fun VideoPlayerScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.45f))
+                    .background(Color.Black.copy(alpha = 0.40f))
             ) {
-                // Top Bar
+                // Top Bar: Back | Title (Clean original filename) | Volume | Audio/Subtitles | 3-Dot More
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -436,192 +462,398 @@ fun VideoPlayerScreen(
                         )
                     }
 
-                    Column(
+                    // Original filename text
+                    Text(
+                        text = uiState.title.ifEmpty { "Video" },
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
                             .weight(1f)
-                            .padding(horizontal = 6.dp)
-                    ) {
-                        Text(
-                            text = uiState.title,
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        uiState.resolutionInfo?.let { res ->
-                            Text(
-                                text = "${res.label} • Hardware Accelerated",
-                                color = Color.White.copy(alpha = 0.75f),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Normal
-                            )
-                        }
-                    }
+                            .padding(horizontal = 8.dp)
+                    )
 
                     if (!uiState.isLocked) {
-                        // Aspect Ratio / Screen adjustment
-                        IconButton(onClick = { viewModel.openDialog("resize") }) {
-                            Icon(
-                                imageVector = Icons.Default.AspectRatio,
-                                contentDescription = "Screen Fit",
-                                tint = Color.White
-                            )
-                        }
-
-                        // Subtitles
-                        IconButton(onClick = { viewModel.openDialog("subtitle") }) {
-                            Icon(
-                                imageVector = Icons.Default.Subtitles,
-                                contentDescription = "Subtitles",
-                                tint = if (uiState.isSubtitleEnabled) MaterialTheme.colorScheme.primary else Color.White
-                            )
-                        }
-
-                        // Audio Track
-                        IconButton(onClick = { viewModel.openDialog("audio") }) {
-                            Icon(
-                                imageVector = Icons.Default.Audiotrack,
-                                contentDescription = "Audio Track",
-                                tint = Color.White
-                            )
-                        }
-
-                        // Playback Speed
-                        IconButton(onClick = { viewModel.openDialog("speed") }) {
-                            Icon(
-                                imageVector = Icons.Default.Speed,
-                                contentDescription = "Speed",
-                                tint = Color.White
-                            )
-                        }
-
-                        // Rotate 90
-                        IconButton(onClick = { viewModel.rotate90(clockwise = true) }) {
-                            Icon(
-                                imageVector = Icons.Default.RotateRight,
-                                contentDescription = "Rotate",
-                                tint = Color.White
-                            )
-                        }
-
-                        // Picture in Picture
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            IconButton(onClick = {
-                                activity?.enterPictureInPictureMode()
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Default.PictureInPictureAlt,
-                                    contentDescription = "PiP",
-                                    tint = Color.White
-                                )
-                            }
-                        }
-                    }
-
-                    // Lock button (always visible)
-                    IconButton(
-                        onClick = { viewModel.toggleLock() },
-                        modifier = Modifier.testTag("lock_controls_button")
-                    ) {
-                        Icon(
-                            imageVector = if (uiState.isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
-                            contentDescription = if (uiState.isLocked) "Unlock" else "Lock",
-                            tint = if (uiState.isLocked) MaterialTheme.colorScheme.error else Color.White
-                        )
-                    }
-                }
-
-                // Center Controls (when unlocked)
-                if (!uiState.isLocked) {
-                    Row(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalArrangement = Arrangement.spacedBy(24.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                        // Volume Icon
                         IconButton(
-                            onClick = { viewModel.doubleTapSeekBackward() },
-                            modifier = Modifier.size(54.dp)
+                            onClick = {
+                                viewModel.showGestureIndicator("Volume: ${(uiState.volume * 100).toInt()}%")
+                            },
+                            modifier = Modifier.testTag("volume_button")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Replay10,
-                                contentDescription = "Rewind 10s",
-                                tint = Color.White,
-                                modifier = Modifier.size(36.dp)
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = "Volume",
+                                tint = Color.White
                             )
                         }
 
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clickable { viewModel.togglePlayPause() }
-                                .testTag("play_pause_button")
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (uiState.isPlaying) "Pause" else "Play",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
-                        }
-
+                        // Audio & Subtitles Combined Icon (Opens Section 4 Panel)
                         IconButton(
-                            onClick = { viewModel.doubleTapSeekForward() },
-                            modifier = Modifier.size(54.dp)
+                            onClick = { viewModel.toggleAudioSubtitlePanel() },
+                            modifier = Modifier.testTag("audio_subtitles_button")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Forward10,
-                                contentDescription = "Forward 10s",
-                                tint = Color.White,
-                                modifier = Modifier.size(36.dp)
+                                imageVector = Icons.Default.SpeakerNotes,
+                                contentDescription = "Audio and Subtitles",
+                                tint = if (uiState.showAudioSubtitlePanel) GMKElectricBlue else Color.White
+                            )
+                        }
+
+                        // Three-Dot Menu (Opens Section 3 Menu)
+                        IconButton(
+                            onClick = { viewModel.toggleThreeDotMenu() },
+                            modifier = Modifier.testTag("more_menu_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "More options",
+                                tint = if (uiState.showThreeDotMenu) GMKElectricBlue else Color.White
+                            )
+                        }
+                    } else {
+                        // When locked: prominent unlock button in top right
+                        IconButton(
+                            onClick = { viewModel.toggleLock() },
+                            modifier = Modifier.testTag("lock_controls_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "Unlock screen",
+                                tint = Color.White
                             )
                         }
                     }
                 }
 
-                // Bottom Timeline & Controls (when unlocked)
+                // Audio Only Fallback indicator banner
+                if (uiState.isAudioOnlyFallback) {
+                    Surface(
+                        color = Color(0xD9101622),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, GMKElectricBlue),
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 56.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Audiotrack, contentDescription = null, tint = GMKElectricBlue)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Audio-Only Mode (Decoder Fallback)", color = Color.White, fontSize = 13.sp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            TextButton(onClick = { viewModel.resumeVideoRendering() }) {
+                                Text("Resume Video", color = GMKElectricBlue, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+
+                // Section 3: Three Dot Menu Component (Floating top-right)
+                if (uiState.showThreeDotMenu && !uiState.isLocked) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xF2101520),
+                        border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                        tonalElevation = 8.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(top = 48.dp, end = 12.dp)
+                            .width(220.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                            // 1. Lock
+                            ThreeDotMenuItem(
+                                icon = Icons.Default.Lock,
+                                label = "Lock",
+                                onClick = {
+                                    viewModel.closeDialogs()
+                                    viewModel.toggleLock()
+                                }
+                            )
+                            // 2. Sleep Timer
+                            ThreeDotMenuItem(
+                                icon = Icons.Default.Timer,
+                                label = "Sleep timer",
+                                onClick = { viewModel.openDialog("sleep") }
+                            )
+                            // 3. Playback Speed
+                            ThreeDotMenuItem(
+                                icon = Icons.Default.Speed,
+                                label = "Playback speed",
+                                onClick = { viewModel.openDialog("speed") }
+                            )
+                            // 4. Jump to Time
+                            ThreeDotMenuItem(
+                                icon = Icons.Default.Schedule,
+                                label = "Jump to Time",
+                                onClick = { viewModel.openDialog("jump") }
+                            )
+                            // 5. Equalizer
+                            ThreeDotMenuItem(
+                                icon = Icons.Default.Tune,
+                                label = "Equalizer",
+                                onClick = { viewModel.openDialog("equalizer") }
+                            )
+                            // 6. Play as audio
+                            ThreeDotMenuItem(
+                                icon = Icons.Default.Audiotrack,
+                                label = "Play as audio",
+                                onClick = {
+                                    viewModel.closeDialogs()
+                                    viewModel.playAudioOnly()
+                                }
+                            )
+                            // 7. Pop-Up player
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                ThreeDotMenuItem(
+                                    icon = Icons.Default.PictureInPictureAlt,
+                                    label = "Pop-Up player",
+                                    onClick = {
+                                        viewModel.closeDialogs()
+                                        activity?.enterPictureInPictureMode()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Section 4: Audio & Subtitles Selection Panel (Floating dual-column card)
+                if (uiState.showAudioSubtitlePanel && !uiState.isLocked) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xF2101520),
+                        border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                        tonalElevation = 8.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(top = 48.dp, end = 12.dp)
+                            .fillMaxWidth(0.70f)
+                            .height(280.dp)
+                    ) {
+                        Row(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+                            // Column 1: Audio Tracks
+                            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Audio", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                    item {
+                                        val isNoneSelected = uiState.audioTracks.none { it.isSelected }
+                                        TrackSelectionRow(
+                                            label = "Disable track",
+                                            isSelected = isNoneSelected,
+                                            onClick = { viewModel.selectAudioTrack(null) }
+                                        )
+                                    }
+                                    if (uiState.audioTracks.isEmpty()) {
+                                        item {
+                                            Text(
+                                                text = "Default audio track",
+                                                color = Color.White.copy(alpha = 0.7f),
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.padding(vertical = 6.dp)
+                                            )
+                                        }
+                                    } else {
+                                        items(uiState.audioTracks) { track ->
+                                            TrackSelectionRow(
+                                                label = track.label,
+                                                isSelected = track.isSelected,
+                                                onClick = { viewModel.selectAudioTrack(track) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            VerticalDivider(
+                                color = Color(0x33FFFFFF),
+                                modifier = Modifier.padding(horizontal = 12.dp).fillMaxHeight()
+                            )
+
+                            // Column 2: Subtitle Tracks
+                            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Subtitles", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                LazyColumn(modifier = Modifier.weight(1f)) {
+                                    item {
+                                        TrackSelectionRow(
+                                            label = "Disable track",
+                                            isSelected = !uiState.isSubtitleEnabled,
+                                            onClick = { viewModel.selectSubtitleTrack(null) }
+                                        )
+                                    }
+                                    if (uiState.subtitleTracks.isEmpty()) {
+                                        item {
+                                            Text(
+                                                text = "No embedded subtitles",
+                                                color = Color.White.copy(alpha = 0.6f),
+                                                fontSize = 12.sp,
+                                                modifier = Modifier.padding(vertical = 6.dp)
+                                            )
+                                        }
+                                    } else {
+                                        items(uiState.subtitleTracks) { track ->
+                                            TrackSelectionRow(
+                                                label = track.label,
+                                                isSelected = track.isSelected && uiState.isSubtitleEnabled,
+                                                onClick = { viewModel.selectSubtitleTrack(track) }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Load External Subtitle Button
+                                TextButton(
+                                    onClick = {
+                                        subtitlePicker.launch(arrayOf("text/plain", "application/x-subrip", "*/*"))
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "+ Load external subtitle (.srt, .ass, .vtt)",
+                                        fontSize = 11.sp,
+                                        color = GMKElectricBlue,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Bottom Timeline & Controls (Section 1 & 2 Matching Layout)
                 if (!uiState.isLocked) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
                             .align(Alignment.BottomCenter)
                     ) {
+                        // Timeline & Seekbar Row (Current Time -- Orange Dot Seekbar -- Remaining Time)
+                        val remainingMs = (uiState.durationMs - uiState.currentPositionMs).coerceAtLeast(0L)
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = formatTime(uiState.currentPositionMs),
                                 color = Color.White,
-                                fontSize = 13.sp
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
                             )
-                            Spacer(modifier = Modifier.weight(1f))
+
+                            Slider(
+                                value = uiState.currentPositionMs.toFloat(),
+                                onValueChange = { pos -> viewModel.seekTo(pos.toLong()) },
+                                valueRange = 0f..uiState.durationMs.coerceAtLeast(1L).toFloat(),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color(0xFFFF5722), // Orange/coral thumb dot from reference image
+                                    activeTrackColor = Color.White,
+                                    inactiveTrackColor = Color(0x55FFFFFF)
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 10.dp)
+                                    .testTag("video_seek_slider")
+                            )
+
                             Text(
-                                text = formatTime(uiState.durationMs),
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 13.sp
+                                text = "- ${formatTime(remainingMs)}",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
 
-                        Slider(
-                            value = uiState.currentPositionMs.toFloat(),
-                            onValueChange = { pos -> viewModel.seekTo(pos.toLong()) },
-                            valueRange = 0f..uiState.durationMs.coerceAtLeast(1L).toFloat(),
-                            colors = SliderDefaults.colors(
-                                thumbColor = MaterialTheme.colorScheme.primary,
-                                activeTrackColor = MaterialTheme.colorScheme.primary,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-                            ),
+                        // Bottom Controls Row: [Subtitles] [Repeat] --- ( ▶/|| ) in Center --- [Fullscreen] [...]
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .testTag("video_seek_slider")
-                        )
+                                .padding(horizontal = 4.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Lower Left Group: Subtitles and Aspect/Repeat
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { viewModel.toggleAudioSubtitlePanel() }) {
+                                    Icon(
+                                        imageVector = Icons.Default.ClosedCaption,
+                                        contentDescription = "Subtitles",
+                                        tint = if (uiState.isSubtitleEnabled) Color.White else Color(0x88FFFFFF)
+                                    )
+                                }
+                                IconButton(onClick = { viewModel.toggleRepeat() }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Repeat,
+                                        contentDescription = "Loop playback",
+                                        tint = if (uiState.isRepeatEnabled) GMKElectricBlue else Color.White
+                                    )
+                                }
+                            }
+
+                            // Center Play/Pause circular button (Matching Section 1 & 2 exact placement)
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0x66000000),
+                                border = BorderStroke(1.5.dp, Color.White),
+                                modifier = Modifier
+                                    .size(50.dp)
+                                    .clickable { viewModel.togglePlayPause() }
+                                    .testTag("play_pause_button")
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = if (uiState.isPlaying) "Pause" else "Play",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(30.dp)
+                                    )
+                                }
+                            }
+
+                            // Lower Right Group: Fullscreen and More (...)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = {
+                                    viewModel.setResizeMode(
+                                        if (uiState.resizeMode == ResizeMode.FIT) ResizeMode.ZOOM else ResizeMode.FIT
+                                    )
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Fullscreen,
+                                        contentDescription = "Toggle screen scale",
+                                        tint = Color.White
+                                    )
+                                }
+                                IconButton(onClick = { viewModel.toggleThreeDotMenu() }) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreHoriz,
+                                        contentDescription = "More options",
+                                        tint = Color.White
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -664,7 +896,7 @@ fun VideoPlayerScreen(
             }
         }
 
-        // Playback Error Alert Dialog
+        // Priority 1: Playback Error Alert Dialog with Real Software Fallback and Non-Looping Logic
         uiState.playbackError?.let { errorMsg ->
             AlertDialog(
                 onDismissRequest = { viewModel.dismissError() },
@@ -672,23 +904,42 @@ fun VideoPlayerScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Playback Notice", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (uiState.decodingFallbackAttempted) "Format Unsupported" else "Decoder Notice",
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 },
                 text = {
                     Column {
                         Text(errorMsg, fontSize = 14.sp, lineHeight = 20.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "GMK Player supports MP4, MKV, WebM, MOV, AVI, TS, and MPEG with hardware acceleration. If hardware decoding fails, software fallback can be tried.",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        if (!uiState.decodingFallbackAttempted) {
+                            Text(
+                                text = "GMK Player attempted hardware decoding first. You can switch to the Android Software Decoder to play high-profile or 10-bit streams.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            Text(
+                                text = "Neither hardware nor software decoders on this device support this video stream profile. You can play the audio track in background or choose another video file.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { viewModel.retryWithFallback() }) {
-                        Text("Retry with Fallback")
+                    Row {
+                        if (!uiState.decodingFallbackAttempted) {
+                            TextButton(onClick = { viewModel.retryWithFallback() }) {
+                                Text("Retry with Software Decoder", fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            TextButton(onClick = { viewModel.playAudioOnly() }) {
+                                Text("Play Audio Only", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 },
                 dismissButton = {
@@ -743,6 +994,32 @@ fun VideoPlayerScreen(
             AudioTrackDialog(
                 tracks = uiState.audioTracks,
                 onSelectTrack = { viewModel.selectAudioTrack(it) },
+                onDismiss = { viewModel.closeDialogs() }
+            )
+        }
+
+        // Sleep Timer Dialog
+        if (uiState.showSleepTimerDialog) {
+            SleepTimerDialog(
+                currentTimer = uiState.sleepTimerMinutesRemaining,
+                onSelectMinutes = { viewModel.setSleepTimer(it) },
+                onDismiss = { viewModel.closeDialogs() }
+            )
+        }
+
+        // Jump to Time Dialog
+        if (uiState.showJumpToTimeDialog) {
+            JumpToTimeDialog(
+                currentMs = uiState.currentPositionMs,
+                durationMs = uiState.durationMs,
+                onJump = { m, s -> viewModel.jumpToTime(m, s) },
+                onDismiss = { viewModel.closeDialogs() }
+            )
+        }
+
+        // Equalizer Dialog
+        if (uiState.showEqualizerDialog) {
+            VideoEqualizerDialog(
                 onDismiss = { viewModel.closeDialogs() }
             )
         }
@@ -977,6 +1254,303 @@ fun AudioTrackDialog(
             TextButton(onClick = onDismiss) { Text("Close") }
         }
     )
+}
+
+@Composable
+fun SleepTimerDialog(
+    currentTimer: Int?,
+    onSelectMinutes: (Int?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf(
+        null to "Off (Cancel Timer)",
+        15 to "15 minutes",
+        30 to "30 minutes",
+        45 to "45 minutes",
+        60 to "60 minutes",
+        90 to "90 minutes"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Timer, contentDescription = null, tint = GMKElectricBlue)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Sleep Timer", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column {
+                options.forEach { (mins, label) ->
+                    val isSelected = currentTimer == mins
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectMinutes(mins) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = { onSelectMinutes(mins) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = label,
+                            fontSize = 15.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
+@Composable
+fun JumpToTimeDialog(
+    currentMs: Long,
+    durationMs: Long,
+    onJump: (Long, Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var targetSec by remember { mutableLongStateOf((currentMs / 1000L).coerceIn(0L, (durationMs / 1000L).coerceAtLeast(1L))) }
+    val maxSec = (durationMs / 1000L).coerceAtLeast(1L)
+
+    val currentMinutes = targetSec / 60
+    val currentSeconds = targetSec % 60
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Schedule, contentDescription = null, tint = GMKElectricBlue)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Jump to Time", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = String.format("%02d:%02d / %s", currentMinutes, currentSeconds, formatTime(durationMs)),
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GMKElectricBlue
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Slider(
+                    value = targetSec.toFloat(),
+                    onValueChange = { targetSec = it.toLong().coerceIn(0L, maxSec) },
+                    valueRange = 0f..maxSec.toFloat(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = GMKElectricBlue,
+                        activeTrackColor = GMKElectricBlue
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    TextButton(onClick = { targetSec = (targetSec - 60).coerceAtLeast(0L) }) { Text("-1m") }
+                    TextButton(onClick = { targetSec = (targetSec - 300).coerceAtLeast(0L) }) { Text("-5m") }
+                    TextButton(onClick = { targetSec = (targetSec + 60).coerceAtMost(maxSec) }) { Text("+1m") }
+                    TextButton(onClick = { targetSec = (targetSec + 300).coerceAtMost(maxSec) }) { Text("+5m") }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onJump(currentMinutes, currentSeconds) }) {
+                Text("Jump", fontWeight = FontWeight.Bold, color = GMKElectricBlue)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+fun VideoEqualizerDialog(
+    onDismiss: () -> Unit
+) {
+    val presets = listOf("Flat", "Bass Boost", "Vocal", "Movie", "Rock", "Pop")
+    var selectedPreset by remember { mutableStateOf("Flat") }
+    var bassLevel by remember { mutableFloatStateOf(0.5f) }
+    var trebleLevel by remember { mutableFloatStateOf(0.5f) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Tune, contentDescription = null, tint = GMKElectricBlue)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Equalizer & Sound FX", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column {
+                Text("Audio Presets", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    presets.take(3).forEach { preset ->
+                        val isSelected = selectedPreset == preset
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) GMKElectricBlue else Color(0xFF1E2638),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    selectedPreset = preset
+                                    when (preset) {
+                                        "Flat" -> { bassLevel = 0.5f; trebleLevel = 0.5f }
+                                        "Bass Boost" -> { bassLevel = 0.85f; trebleLevel = 0.45f }
+                                        "Vocal" -> { bassLevel = 0.35f; trebleLevel = 0.75f }
+                                    }
+                                }
+                                .padding(vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = preset,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    presets.drop(3).forEach { preset ->
+                        val isSelected = selectedPreset == preset
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) GMKElectricBlue else Color(0xFF1E2638),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    selectedPreset = preset
+                                    when (preset) {
+                                        "Movie" -> { bassLevel = 0.7f; trebleLevel = 0.65f }
+                                        "Rock" -> { bassLevel = 0.75f; trebleLevel = 0.7f }
+                                        "Pop" -> { bassLevel = 0.6f; trebleLevel = 0.6f }
+                                    }
+                                }
+                                .padding(vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = preset,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Bass Boost: ${(bassLevel * 100).toInt()}%", fontSize = 12.sp)
+                Slider(
+                    value = bassLevel,
+                    onValueChange = { bassLevel = it; selectedPreset = "Custom" },
+                    colors = SliderDefaults.colors(activeTrackColor = GMKElectricBlue, thumbColor = GMKElectricBlue)
+                )
+
+                Text("Treble: ${(trebleLevel * 100).toInt()}%", fontSize = 12.sp)
+                Slider(
+                    value = trebleLevel,
+                    onValueChange = { trebleLevel = it; selectedPreset = "Custom" },
+                    colors = SliderDefaults.colors(activeTrackColor = GMKElectricBlue, thumbColor = GMKElectricBlue)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Apply", fontWeight = FontWeight.Bold, color = GMKElectricBlue) }
+        }
+    )
+}
+
+@Composable
+private fun ThreeDotMenuItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Text(
+            text = label,
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Normal
+        )
+    }
+}
+
+@Composable
+private fun TrackSelectionRow(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (isSelected) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = "Selected",
+                tint = Color.White,
+                modifier = Modifier.size(16.dp)
+            )
+        } else {
+            Spacer(modifier = Modifier.size(16.dp))
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = label,
+            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f),
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
 }
 
 fun formatTime(ms: Long): String {

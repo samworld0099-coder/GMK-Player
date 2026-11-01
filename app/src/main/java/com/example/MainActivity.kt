@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Language
@@ -39,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
@@ -82,6 +84,8 @@ import com.example.ui.recent.RecentScreen
 import com.example.ui.search.SearchScreen
 import com.example.ui.settings.SettingsScreen
 import com.example.ui.videos.VideosScreen
+import com.example.cloud.GMKCloudScreen
+import com.example.ui.splash.SplashScreen
 import android.content.Context
 import com.example.browser.WebBrowserScreen
 import com.example.cleanup.StorageCleanupScreen
@@ -95,6 +99,11 @@ import com.example.ui.trash.RecentlyDeletedScreen
 import com.example.vault.PrivateVaultScreen
 import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.GMKMediaPlayerTheme
+import com.example.ui.theme.GMKBackgroundDark
+import com.example.ui.theme.GMKSurfaceDark
+import com.example.ui.theme.GMKElectricBlue
+import com.example.ui.theme.GMKTextMuted
+import com.example.ui.theme.GMKTextWhite
 import com.example.ui.viewer.DocumentViewerScreen
 import kotlinx.coroutines.launch
 import java.io.File
@@ -113,6 +122,7 @@ sealed class ActiveScreen {
     object Donation : ActiveScreen()
     object Feedback : ActiveScreen()
     object ContactUs : ActiveScreen()
+    object Settings : ActiveScreen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -174,6 +184,13 @@ fun MainAppContent(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    var showSplashScreen by remember { mutableStateOf(true) }
+
+    if (showSplashScreen) {
+        SplashScreen(onFinished = { showSplashScreen = false })
+        return
+    }
 
     var activeScreen by remember { mutableStateOf<ActiveScreen>(ActiveScreen.MainNavigation) }
     var selectedNavIndex by remember { mutableIntStateOf(0) }
@@ -411,6 +428,17 @@ fun MainAppContent(
                 onBack = { activeScreen = ActiveScreen.MainNavigation }
             )
         }
+        is ActiveScreen.Settings -> {
+            SettingsScreen(
+                repository = repository,
+                currentTheme = currentTheme,
+                onThemeChanged = onThemeChanged,
+                onOpenStorageCleanup = { activeScreen = ActiveScreen.StorageCleanup },
+                onOpenDonation = { activeScreen = ActiveScreen.Donation },
+                onOpenFeedback = { activeScreen = ActiveScreen.Feedback },
+                onOpenContactUs = { activeScreen = ActiveScreen.ContactUs }
+            )
+        }
         is ActiveScreen.MainNavigation -> {
             BackHandler(enabled = selectedNavIndex != 0) {
                 selectedNavIndex = 0
@@ -418,26 +446,23 @@ fun MainAppContent(
 
             val navItems = listOf(
                 "Home" to Icons.Default.Home,
-                "Browse" to Icons.Default.Folder,
                 "Videos" to Icons.Default.Movie,
                 "Music" to Icons.Default.MusicNote,
-                "Archives" to Icons.Default.Archive,
-                "Web" to Icons.Default.Language,
-                "Recent" to Icons.Default.History,
-                "Favorites" to Icons.Default.Favorite,
-                "Settings" to Icons.Default.Settings
+                "Cloud" to Icons.Default.Cloud,
+                "Browser" to Icons.Default.Language,
+                "Files" to Icons.Default.Folder
             )
 
             Scaffold(
                 bottomBar = {
                     Column(
                         modifier = Modifier
-                            .background(Color(0xFF0D47A1))
+                            .background(GMKBackgroundDark)
                             .navigationBarsPadding()
                     ) {
                         // Persistent Mini Player when audio is loaded
                         val audioState by audioViewModel.uiState.collectAsState()
-                        if (audioState.currentTrack != null && selectedNavIndex != 3) {
+                        if (audioState.currentTrack != null && selectedNavIndex != 2) {
                             MiniPlayerBar(
                                 track = audioState.currentTrack!!,
                                 isPlaying = audioState.isPlaying,
@@ -447,57 +472,44 @@ fun MainAppContent(
                             )
                         }
 
-                        // Bottom Navigation Bar — Royal Blue Theme
-                        Surface(
-                            color = Color(0xFF0D47A1), // Royal Blue
-                            contentColor = Color.White,
-                            modifier = Modifier.fillMaxWidth()
+                        // 6-destination Bottom Navigation Bar matching reference design: Home | Videos | Music | Cloud | Browser | Files
+                        NavigationBar(
+                            containerColor = GMKSurfaceDark,
+                            tonalElevation = 0.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("main_navigation_bar")
                         ) {
-                            ScrollableTabRow(
-                                selectedTabIndex = selectedNavIndex,
-                                edgePadding = 12.dp,
-                                containerColor = Color(0xFF0D47A1), // Royal Blue container
-                                contentColor = Color.White,
-                                indicator = { tabPositions ->
-                                    if (selectedNavIndex < tabPositions.size) {
-                                        TabRowDefaults.SecondaryIndicator(
-                                            Modifier.tabIndicatorOffset(tabPositions[selectedNavIndex]),
-                                            color = Color.White, // White indicator line
-                                            height = 3.dp
+                            navItems.forEachIndexed { index, (label, icon) ->
+                                val isSelected = selectedNavIndex == index
+                                NavigationBarItem(
+                                    selected = isSelected,
+                                    onClick = { selectedNavIndex = index },
+                                    alwaysShowLabel = true,
+                                    icon = {
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = label,
+                                            tint = if (isSelected) GMKElectricBlue else GMKTextMuted
                                         )
-                                    }
-                                },
-                                divider = {},
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("main_navigation_bar")
-                            ) {
-                                navItems.forEachIndexed { index, (label, icon) ->
-                                    val isSelected = selectedNavIndex == index
-                                    val contentAlpha = if (isSelected) 1.0f else 0.70f
-                                    val tintColor = Color.White.copy(alpha = contentAlpha)
-                                    Tab(
-                                        selected = isSelected,
-                                        onClick = { selectedNavIndex = index },
-                                        selectedContentColor = Color.White,
-                                        unselectedContentColor = Color.White.copy(alpha = 0.70f),
-                                        icon = {
-                                            Icon(
-                                                imageVector = icon,
-                                                contentDescription = label,
-                                                tint = tintColor
-                                            )
-                                        },
-                                        text = {
-                                            Text(
-                                                text = label,
-                                                fontSize = 11.sp,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                color = tintColor
-                                            )
-                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            text = label,
+                                            fontSize = 10.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            maxLines = 1,
+                                            color = if (isSelected) GMKElectricBlue else GMKTextMuted
+                                        )
+                                    },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = GMKElectricBlue.copy(alpha = 0.15f),
+                                        selectedIconColor = GMKElectricBlue,
+                                        selectedTextColor = GMKElectricBlue,
+                                        unselectedIconColor = GMKTextMuted,
+                                        unselectedTextColor = GMKTextMuted
                                     )
-                                }
+                                )
                             }
                         }
                     }
@@ -513,31 +525,38 @@ fun MainAppContent(
                             repository = repository,
                             onNavigateToFolder = { dir ->
                                 currentFolder = dir
-                                selectedNavIndex = 1
+                                selectedNavIndex = 5
                             },
                             onOpenFile = { openMediaItem(it) },
                             onCategoryClick = { catId ->
                                 when (catId) {
+                                    "videos" -> selectedNavIndex = 1
+                                    "audio" -> selectedNavIndex = 2
+                                    "cloud" -> selectedNavIndex = 3
+                                    "browser" -> selectedNavIndex = 4
+                                    "files" -> selectedNavIndex = 5
                                     "images" -> {
                                         val pics = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                                        if (pics.exists()) currentFolder = pics
-                                        selectedNavIndex = 1
+                                        if (pics != null && pics.exists()) currentFolder = pics
+                                        selectedNavIndex = 5
                                     }
-                                    "videos" -> selectedNavIndex = 2
-                                    "audio" -> selectedNavIndex = 3
                                     "documents" -> {
                                         val docs = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-                                        if (docs.exists()) currentFolder = docs
-                                        selectedNavIndex = 1
+                                        if (docs != null && docs.exists()) currentFolder = docs
+                                        selectedNavIndex = 5
                                     }
                                     "downloads" -> {
                                         val dl = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                                        if (dl.exists()) currentFolder = dl
-                                        selectedNavIndex = 1
+                                        if (dl != null && dl.exists()) currentFolder = dl
+                                        selectedNavIndex = 5
                                     }
-                                    "archives" -> selectedNavIndex = 4
+                                    "apk_files" -> {
+                                        val dl = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                                        if (dl != null && dl.exists()) currentFolder = dl
+                                        selectedNavIndex = 5
+                                    }
                                     "large_files" -> activeScreen = ActiveScreen.StorageCleanup
-                                    "recent_files" -> selectedNavIndex = 6
+                                    else -> selectedNavIndex = 5
                                 }
                             },
                             onSearchClick = { activeScreen = ActiveScreen.Search },
@@ -545,22 +564,17 @@ fun MainAppContent(
                             onOpenOverflowAction = { action ->
                                 when (action) {
                                     "transfer" -> activeScreen = ActiveScreen.SendReceive()
+                                    "cloud" -> selectedNavIndex = 3
                                     "vault" -> activeScreen = ActiveScreen.PrivateVault
                                     "trash" -> activeScreen = ActiveScreen.RecentlyDeleted
                                     "cleanup" -> activeScreen = ActiveScreen.StorageCleanup
-                                    "browser" -> selectedNavIndex = 5
+                                    "browser" -> selectedNavIndex = 4
                                     "donation" -> activeScreen = ActiveScreen.Donation
-                                    "settings" -> selectedNavIndex = 8
+                                    "settings" -> activeScreen = ActiveScreen.Settings
                                 }
                             }
                         )
-                        1 -> FileBrowserScreen(
-                            initialDirectory = currentFolder,
-                            onOpenFile = { openMediaItem(it) },
-                            onToggleFavorite = { scope.launch { repository.toggleFavorite(it) } },
-                            onBack = { selectedNavIndex = 0 }
-                        )
-                        2 -> VideosScreen(
+                        1 -> VideosScreen(
                             videos = allVideos,
                             onVideoClick = { openMediaItem(it) },
                             onRefreshVideos = {
@@ -572,39 +586,29 @@ fun MainAppContent(
                                 activeScreen = ActiveScreen.SendReceive(initialFiles = files)
                             },
                             onOpenSettings = {
-                                selectedNavIndex = 8
+                                activeScreen = ActiveScreen.Settings
                             }
                         )
-                        3 -> MusicScreen(
+                        2 -> MusicScreen(
                             songs = allAudios,
-                            viewModel = audioViewModel
+                            viewModel = audioViewModel,
+                            onOpenSearch = { activeScreen = ActiveScreen.Search },
+                            onOpenDrawer = { activeScreen = ActiveScreen.Settings }
                         )
-                        4 -> ArchivesListScreen(
-                            archives = allArchives,
-                            onOpenArchive = { file ->
-                                activeScreen = ActiveScreen.ArchiveBrowser(file)
-                            }
+                        3 -> GMKCloudScreen(
+                            onOpenFile = { openMediaItem(it) },
+                            onMenuClick = { activeScreen = ActiveScreen.Settings },
+                            onSearchClick = { activeScreen = ActiveScreen.Search }
                         )
-                        5 -> WebBrowserScreen(
+                        4 -> WebBrowserScreen(
                             onOpenDownloadedMedia = { openMediaItem(it) },
                             onBack = { selectedNavIndex = 0 }
                         )
-                        6 -> RecentScreen(
-                            repository = repository,
-                            onOpenItem = { openMediaItem(it) }
-                        )
-                        7 -> FavoritesScreen(
-                            repository = repository,
-                            onOpenItem = { openMediaItem(it) }
-                        )
-                        8 -> SettingsScreen(
-                            repository = repository,
-                            currentTheme = currentTheme,
-                            onThemeChanged = onThemeChanged,
-                            onOpenStorageCleanup = { activeScreen = ActiveScreen.StorageCleanup },
-                            onOpenDonation = { activeScreen = ActiveScreen.Donation },
-                            onOpenFeedback = { activeScreen = ActiveScreen.Feedback },
-                            onOpenContactUs = { activeScreen = ActiveScreen.ContactUs }
+                        5 -> FileBrowserScreen(
+                            initialDirectory = currentFolder,
+                            onOpenFile = { openMediaItem(it) },
+                            onToggleFavorite = { scope.launch { repository.toggleFavorite(it) } },
+                            onBack = { selectedNavIndex = 0 }
                         )
                     }
                 }

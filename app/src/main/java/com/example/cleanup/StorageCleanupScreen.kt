@@ -63,6 +63,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import com.example.ui.theme.GMKElectricBlue
+import com.example.ui.theme.GMKBackgroundDark
+import com.example.ui.theme.GMKSurfaceDark
+import com.example.ui.theme.GMKSurfaceVariantDark
+import com.example.ui.theme.GMKTextWhite
+import com.example.ui.theme.GMKTextMuted
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -569,84 +575,89 @@ fun StorageCleanupScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Storage Bar Overview (Royal Blue container with White Usage Line)
+                // 1. Circular Radial Storage Gauge (Image 4 Screen 14)
                 val primary = storageList.firstOrNull()
                 primary?.let { storage ->
                     item {
                         val usedPct = storage.usedPercentage
-                        val progressColor = when {
-                            usedPct >= 0.90f -> Color(0xFFF44336)
-                            usedPct >= 0.80f -> Color(0xFFFF9800)
-                            usedPct >= 0.70f -> Color(0xFFFFEB3B)
-                            else -> Color.White
-                        }
-
                         Card(
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF0D47A1)),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = GMKSurfaceDark),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = Color.White.copy(alpha = 0.20f),
-                                        modifier = Modifier.size(42.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.Default.SdStorage,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(150.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        progress = { usedPct },
+                                        strokeWidth = 14.dp,
+                                        color = GMKElectricBlue,
+                                        trackColor = Color(0x221E88E5),
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(
-                                            text = storage.title,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp,
+                                            text = "${(usedPct * 100).toInt()}%",
+                                            fontSize = 32.sp,
+                                            fontWeight = FontWeight.Black,
                                             color = Color.White
                                         )
                                         Text(
-                                            text = "${storage.formattedUsed} used of ${storage.formattedTotal} • ${storage.formattedFree} free",
+                                            text = "Used",
                                             fontSize = 12.sp,
-                                            color = Color.White.copy(alpha = 0.90f)
+                                            color = GMKTextMuted,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = "${storage.formattedUsed} / ${storage.formattedTotal}",
+                                            fontSize = 11.sp,
+                                            color = Color.White.copy(alpha = 0.85f),
+                                            fontWeight = FontWeight.Bold
                                         )
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(14.dp))
+                                Spacer(modifier = Modifier.height(18.dp))
 
-                                LinearProgressIndicator(
-                                    progress = { storage.usedPercentage },
+                                Button(
+                                    onClick = {
+                                        scope.launch {
+                                            val freed = appCacheBytes
+                                            withContext(Dispatchers.IO) {
+                                                context.cacheDir.deleteRecursively()
+                                                context.externalCacheDir?.deleteRecursively()
+                                                appCacheBytes = 0L
+                                            }
+                                            snackbarHostState.showSnackbar(
+                                                "Cleaned junk & app cache (${StorageInfo.formatBytes(freed)})"
+                                            )
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = GMKElectricBlue),
+                                    shape = RoundedCornerShape(24.dp),
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(8.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
-                                    color = progressColor,
-                                    trackColor = Color.White.copy(alpha = 0.25f)
-                                )
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                        .fillMaxWidth(0.9f)
+                                        .height(48.dp)
                                 ) {
-                                    Text(
-                                        text = "${(usedPct * 100).toInt()}% Consumed",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
+                                    Icon(
+                                        imageVector = Icons.Default.CleaningServices,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
                                     )
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Cleanable: ~${StorageInfo.formatBytes(estimatedCleanableBytes)}",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFFFFEB3B)
+                                        text = "Clean Junk Files (${StorageInfo.formatBytes(estimatedCleanableBytes)})",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
                                     )
                                 }
                             }

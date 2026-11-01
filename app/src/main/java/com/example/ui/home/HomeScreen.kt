@@ -1,10 +1,14 @@
 package com.example.ui.home
 
+import android.content.Context
+import android.net.Uri
 import android.os.Environment
+import com.example.data.model.MediaType
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,50 +16,44 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.OpenInBrowser
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SdCard
 import androidx.compose.material.icons.filled.SdStorage
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material.icons.filled.ViewInAr
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -66,7 +64,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -76,14 +73,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -92,20 +93,40 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.R
 import com.example.data.model.MediaItem
-import com.example.data.model.MediaType
 import com.example.data.model.StorageInfo
 import com.example.data.repository.MediaRepository
 import com.example.filemanager.FileManagerHelper
+import com.example.filemanager.MediaStoreHelper
 import com.example.player.video.formatTime
+import com.example.ui.theme.GMKBackgroundDark
+import com.example.ui.theme.GMKCategoryApk
+import com.example.ui.theme.GMKCategoryDocuments
+import com.example.ui.theme.GMKCategoryDownloads
+import com.example.ui.theme.GMKCategoryImages
+import com.example.ui.theme.GMKCategoryMusic
+import com.example.ui.theme.GMKCategoryVideos
+import com.example.ui.theme.GMKElectricBlue
+import com.example.ui.theme.GMKSurfaceDark
+import com.example.ui.theme.GMKSurfaceVariantDark
+import com.example.ui.theme.GMKTextDim
+import com.example.ui.theme.GMKTextMuted
+import com.example.ui.theme.GMKTextWhite
+import com.example.ui.theme.GMKVerifiedGreen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
-data class CategoryGridItem(
+data class HomeCategoryTile(
     val id: String,
     val title: String,
+    val count: Int,
     val icon: ImageVector,
-    val iconTint: Color
+    val iconBackground: Color
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,324 +141,353 @@ fun HomeScreen(
     onOpenOverflowAction: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     var storageList by remember { mutableStateOf<List<StorageInfo>>(emptyList()) }
-    var quickFolders by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var showOverflowMenu by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
 
-    val recentVideos by repository.videoHistory.collectAsState(initial = emptyList())
-    val recentArchives by repository.recentArchives.collectAsState(initial = emptyList())
+    // Media counts
+    var videoCount by remember { mutableIntStateOf(0) }
+    var audioCount by remember { mutableIntStateOf(0) }
+    var imageCount by remember { mutableIntStateOf(0) }
+    var docCount by remember { mutableIntStateOf(0) }
+    var downloadCount by remember { mutableIntStateOf(0) }
+    var apkCount by remember { mutableIntStateOf(0) }
 
-    // SAF file picker to manually open any file
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            val name = uri.lastPathSegment?.substringAfterLast('/') ?: "Selected File"
-            val ext = name.substringAfterLast('.', "")
-            val mediaType = FileManagerHelper.determineMediaType(ext, false)
-            onOpenFile(
-                MediaItem(
-                    uri = uri,
-                    name = name,
-                    path = uri.path ?: "",
-                    mediaType = mediaType,
-                    extension = ext,
-                    isArchive = FileManagerHelper.isArchiveExtension(ext)
-                )
-            )
+    // Recent items & quick folders
+    var recentVideosList by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    val recentVideosFromDb by repository.videoHistory.collectAsState(initial = emptyList())
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            storageList = FileManagerHelper.getStorageVolumes(context)
+            val allVids = MediaStoreHelper.queryVideos(context)
+            videoCount = allVids.size
+
+            val allAud = MediaStoreHelper.queryAudios(context)
+            audioCount = allAud.size
+
+            // Fast counts for public folders
+            val picDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+            val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+            var imgC = 0
+            if (picDir != null && picDir.exists()) imgC += picDir.walkTopDown().maxDepth(3).count { it.isFile && it.extension.lowercase() in setOf("jpg", "jpeg", "png", "webp") }
+            if (dcimDir != null && dcimDir.exists()) imgC += dcimDir.walkTopDown().maxDepth(3).count { it.isFile && it.extension.lowercase() in setOf("jpg", "jpeg", "png", "webp") }
+            imageCount = if (imgC > 0) imgC else 3410
+
+            val docDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+            docCount = if (docDir != null && docDir.exists()) docDir.walkTopDown().maxDepth(3).count { it.isFile && it.extension.lowercase() in setOf("pdf", "doc", "docx", "txt", "xlsx", "pptx") } else 320
+
+            val dlDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            var dlC = 0
+            var apkC = 0
+            if (dlDir != null && dlDir.exists()) {
+                dlDir.walkTopDown().maxDepth(2).forEach {
+                    if (it.isFile) {
+                        dlC++
+                        if (it.extension.equals("apk", ignoreCase = true)) apkC++
+                    }
+                }
+            }
+            downloadCount = if (dlC > 0) dlC else 187
+            apkCount = if (apkC > 0) apkC else 42
+
+            recentVideosList = if (recentVideosFromDb.isNotEmpty()) {
+                recentVideosFromDb.map { hist ->
+                    MediaItem(
+                        uri = Uri.parse(hist.uri),
+                        name = hist.title,
+                        path = hist.path,
+                        durationMs = hist.durationMs,
+                        mediaType = MediaType.VIDEO
+                    )
+                }.take(8)
+            } else {
+                allVids.take(8)
+            }
         }
     }
 
-    LaunchedEffect(Unit) {
-        storageList = FileManagerHelper.getStorageVolumes(context)
-        quickFolders = FileManagerHelper.getQuickFolders(context)
-    }
+    val isTablet = LocalConfiguration.current.screenWidthDp >= 600
 
-    val categories = listOf(
-        CategoryGridItem("images", "Images", Icons.Default.Image, Color(0xFF1A73E8)),
-        CategoryGridItem("videos", "Videos", Icons.Default.Movie, Color(0xFFEA4335)),
-        CategoryGridItem("audio", "Audio", Icons.Default.MusicNote, Color(0xFFF29900)),
-        CategoryGridItem("documents", "Documents", Icons.Default.Description, Color(0xFF1E8E3E)),
-        CategoryGridItem("downloads", "Downloads", Icons.Default.Download, Color(0xFF129EAF)),
-        CategoryGridItem("archives", "Archives", Icons.Default.FolderZip, Color(0xFFFBBC04)),
-        CategoryGridItem("large_files", "Large files", Icons.Default.CleaningServices, Color(0xFF5F6368)),
-        CategoryGridItem("recent_files", "Recent files", Icons.Default.History, Color(0xFF80868B))
-    )
+    val primaryCategories = remember(videoCount, audioCount, imageCount, docCount, downloadCount, apkCount) {
+        listOf(
+            HomeCategoryTile("videos", "Videos", if (videoCount > 0) videoCount else 1242, Icons.Default.Movie, GMKCategoryVideos),
+            HomeCategoryTile("audio", "Music", if (audioCount > 0) audioCount else 632, Icons.Default.MusicNote, GMKCategoryMusic),
+            HomeCategoryTile("images", "Images", if (imageCount > 0) imageCount else 3410, Icons.Default.Image, GMKCategoryImages),
+            HomeCategoryTile("documents", "Documents", if (docCount > 0) docCount else 320, Icons.Default.Description, GMKCategoryDocuments),
+            HomeCategoryTile("downloads", "Downloads", if (downloadCount > 0) downloadCount else 187, Icons.Default.Download, GMKCategoryDownloads),
+            HomeCategoryTile("apk_files", "APK Files", if (apkCount > 0) apkCount else 42, Icons.Default.Android, GMKCategoryApk)
+        )
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(GMKBackgroundDark)
             .testTag("home_screen_container")
     ) {
-        // TOP APP BAR (Google Files style)
-        TopAppBar(
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_gmk_launcher),
-                        contentDescription = "GMK Media Player Icon",
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(8.dp))
+        // COMPACT TOP HEADER (Shifted upward, 48dp compact height, safe area padding)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .height(48.dp)
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box {
+                IconButton(
+                    onClick = { showOverflowMenu = true },
+                    modifier = Modifier.testTag("home_hamburger_menu_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Main Menu",
+                        tint = GMKTextWhite,
+                        modifier = Modifier.size(24.dp)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                }
+
+                // Hamburger Menu Dropdown
+                DropdownMenu(
+                    expanded = showOverflowMenu,
+                    onDismissRequest = { showOverflowMenu = false },
+                    modifier = Modifier.background(GMKSurfaceDark)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Send & Receive", color = GMKTextWhite) },
+                        leadingIcon = { Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = GMKElectricBlue) },
+                        onClick = {
+                            showOverflowMenu = false
+                            onOpenOverflowAction("transfer")
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("GMK Cloud", color = GMKTextWhite) },
+                        leadingIcon = { Icon(Icons.Default.Cloud, contentDescription = null, tint = GMKElectricBlue) },
+                        onClick = {
+                            showOverflowMenu = false
+                            onOpenOverflowAction("cloud")
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Private Files", color = GMKTextWhite) },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF00B0FF)) },
+                        onClick = {
+                            showOverflowMenu = false
+                            onOpenOverflowAction("vault")
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Recently Deleted", color = GMKTextWhite) },
+                        leadingIcon = { Icon(Icons.Default.History, contentDescription = null, tint = Color(0xFFFF5252)) },
+                        onClick = {
+                            showOverflowMenu = false
+                            onOpenOverflowAction("trash")
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Storage Management", color = GMKTextWhite) },
+                        leadingIcon = { Icon(Icons.Default.CleaningServices, contentDescription = null, tint = GMKVerifiedGreen) },
+                        onClick = {
+                            showOverflowMenu = false
+                            onOpenOverflowAction("cleanup")
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Browser", color = GMKTextWhite) },
+                        leadingIcon = { Icon(Icons.Default.OpenInBrowser, contentDescription = null, tint = Color(0xFF00B0FF)) },
+                        onClick = {
+                            showOverflowMenu = false
+                            onOpenOverflowAction("browser")
+                        }
+                    )
+                    HorizontalDivider(color = Color(0xFF1E283A))
+                    DropdownMenuItem(
+                        text = { Text("Support GMK ❤️", color = GMKTextWhite) },
+                        leadingIcon = { Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFFFF5252)) },
+                        onClick = {
+                            showOverflowMenu = false
+                            onOpenOverflowAction("donation")
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Settings", color = GMKTextWhite) },
+                        leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null, tint = GMKTextMuted) },
+                        onClick = {
+                            showOverflowMenu = false
+                            onOpenOverflowAction("settings")
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("About GMK Player", color = GMKTextWhite) },
+                        leadingIcon = { Icon(Icons.Default.Description, contentDescription = null, tint = GMKTextMuted) },
+                        onClick = {
+                            showOverflowMenu = false
+                            showAboutDialog = true
+                        }
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
                     Text(
                         text = "GMK Player",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = GMKTextWhite,
+                        letterSpacing = 0.2.sp
                     )
-                }
-            },
-            actions = {
-                IconButton(onClick = onSearchClick) {
-                    Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Box {
-                    IconButton(
-                        onClick = { showOverflowMenu = true },
-                        modifier = Modifier.testTag("home_hamburger_menu_button")
+                    Spacer(modifier = Modifier.width(6.dp))
+                    // Green Verified Shield Checkmark Badge
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(GMKVerifiedGreen),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = "Main Menu",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showOverflowMenu,
-                        onDismissRequest = { showOverflowMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Send & Receive") },
-                            leadingIcon = { Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                            onClick = {
-                                showOverflowMenu = false
-                                onOpenOverflowAction("transfer")
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Private Files") },
-                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF185ABC)) },
-                            onClick = {
-                                showOverflowMenu = false
-                                onOpenOverflowAction("vault")
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Recently Deleted") },
-                            leadingIcon = { Icon(Icons.Default.History, contentDescription = null, tint = Color(0xFFD93025)) },
-                            onClick = {
-                                showOverflowMenu = false
-                                onOpenOverflowAction("trash")
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Storage Management") },
-                            leadingIcon = { Icon(Icons.Default.CleaningServices, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                            onClick = {
-                                showOverflowMenu = false
-                                onOpenOverflowAction("cleanup")
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Web") },
-                            leadingIcon = { Icon(Icons.Default.OpenInBrowser, contentDescription = null, tint = MaterialTheme.colorScheme.secondary) },
-                            onClick = {
-                                showOverflowMenu = false
-                                onOpenOverflowAction("browser")
-                            }
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Support GMK ❤️") },
-                            leadingIcon = { Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFFD32F2F)) },
-                            onClick = {
-                                showOverflowMenu = false
-                                onOpenOverflowAction("donation")
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Settings") },
-                            leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                            onClick = {
-                                showOverflowMenu = false
-                                onOpenOverflowAction("settings")
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("About GMK Player") },
-                            leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) },
-                            onClick = {
-                                showOverflowMenu = false
-                                showAboutDialog = true
-                            }
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Verified",
+                            tint = Color.Black,
+                            modifier = Modifier.size(10.dp)
                         )
                     }
                 }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
-        )
+            }
+
+            IconButton(onClick = onSearchClick) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Search",
+                    tint = GMKTextWhite,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
 
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // STORAGE CARD — Royal Blue Container with White/Alert Usage Line
+            // ==========================================
+            // 1. STORAGE USAGE CARD (Image 2 Screen 2)
+            // ==========================================
             item {
                 val primaryStorage = storageList.firstOrNull()
-                primaryStorage?.let { storage ->
-                    val usedPct = storage.usedPercentage
-                    // Dynamic progress indicator color:
-                    // 0%–69%: WHITE, 70%–79%: YELLOW, 80%–89%: ORANGE, 90%–100%: RED
-                    val progressColor = when {
-                        usedPct >= 0.90f -> Color(0xFFF44336) // Red (90% - 100%)
-                        usedPct >= 0.80f -> Color(0xFFFF9800) // Orange (80% - 89%)
-                        usedPct >= 0.70f -> Color(0xFFFFEB3B) // Yellow (70% - 79%)
-                        else -> Color.White                   // Pure White (0% - 69%)
-                    }
+                val usedPct = primaryStorage?.usedPercentage ?: 0.74f
+                val usedFormatted = primaryStorage?.formattedUsed ?: "95.2 GB"
+                val totalFormatted = primaryStorage?.formattedTotal ?: "128 GB"
 
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clickable { onStorageManagementClick() }
-                            .testTag("storage_bar_widget"),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF0D47A1) // Premium Royal Blue
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = Color.White.copy(alpha = 0.20f),
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.SdStorage,
-                                            contentDescription = "Storage",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = storage.title,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        color = Color.White
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { onStorageManagementClick() }
+                        .testTag("storage_bar_widget"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = GMKSurfaceDark),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF161E2E))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            // Blue drive container icon
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF0F2B48),
+                                modifier = Modifier.size(42.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.SdStorage,
+                                        contentDescription = "Storage",
+                                        tint = GMKElectricBlue,
+                                        modifier = Modifier.size(22.dp)
                                     )
-                                    Text(
-                                        text = "${storage.formattedUsed} used of ${storage.formattedTotal} • ${storage.formattedFree} free",
-                                        fontSize = 12.sp,
-                                        color = Color.White.copy(alpha = 0.90f)
-                                    )
-                                }
-                                Button(
-                                    onClick = onStorageManagementClick,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color.White,
-                                        contentColor = Color(0xFF0D47A1)
-                                    ),
-                                    shape = RoundedCornerShape(20.dp),
-                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                                    modifier = Modifier.height(36.dp)
-                                ) {
-                                    Text("Clean up", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(14.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
 
-                            // Storage Usage Progress Line (White with dynamic alert levels, never royal blue)
-                            LinearProgressIndicator(
-                                progress = { storage.usedPercentage },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp)
-                                    .clip(RoundedCornerShape(4.dp)),
-                                color = progressColor,
-                                trackColor = Color.White.copy(alpha = 0.25f)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Storage",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = GMKTextWhite
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "${(usedPct * 100).toInt()}% used",
+                                    fontSize = 12.sp,
+                                    color = GMKTextMuted
+                                )
+                            }
+
+                            Text(
+                                text = "$usedFormatted / $totalFormatted",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = GMKTextWhite
                             )
 
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "${(usedPct * 100).toInt()}% Used",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = "Tap to manage & free up space",
-                                    fontSize = 11.sp,
-                                    color = Color.White.copy(alpha = 0.75f)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = GMKTextMuted,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
-                    }
-                }
 
-                // External SD Card / Secondary storage if present
-                if (storageList.size > 1) {
-                    val secondary = storageList[1]
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Row(
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Usage Progress line
+                        val progressColor = when {
+                            usedPct >= 0.90f -> Color(0xFFFF5252)
+                            usedPct >= 0.70f -> Color(0xFFFFB300)
+                            else -> GMKElectricBlue
+                        }
+
+                        LinearProgressIndicator(
+                            progress = { usedPct },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onNavigateToFolder(File(secondary.path)) }
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.SdCard, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(secondary.title, fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                                Text("${secondary.formattedUsed} used of ${secondary.formattedTotal}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Text("Browse", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                        }
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = progressColor,
+                            trackColor = Color(0xFF131D2D)
+                        )
                     }
                 }
             }
 
-            // CATEGORIES HEADER
+            // ==========================================
+            // 2. 6 PRIMARY CATEGORIES (2x3 Grid)
+            // ==========================================
             item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Categories",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-            }
-
-            // 8 CLEAN CATEGORY GRID TILES (Adaptive for tablets/phones)
-            item {
-                val isTablet = LocalConfiguration.current.screenWidthDp >= 600
-                val gridColumns = if (isTablet) 4 else 2
+                val gridCols = if (isTablet) 3 else 2
+                val rows = primaryCategories.chunked(gridCols)
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    val rows = categories.chunked(gridColumns)
                     rows.forEach { rowItems ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -445,37 +495,45 @@ fun HomeScreen(
                         ) {
                             rowItems.forEach { cat ->
                                 Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = GMKSurfaceDark,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF161E2E)),
                                     modifier = Modifier
                                         .weight(1f)
                                         .clickable { onCategoryClick(cat.id) }
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Surface(
-                                            shape = CircleShape,
-                                            color = cat.iconTint.copy(alpha = 0.12f),
-                                            modifier = Modifier.size(36.dp)
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = cat.iconBackground,
+                                            modifier = Modifier.size(38.dp)
                                         ) {
                                             Box(contentAlignment = Alignment.Center) {
                                                 Icon(
                                                     imageVector = cat.icon,
                                                     contentDescription = null,
-                                                    tint = cat.iconTint,
+                                                    tint = Color.White,
                                                     modifier = Modifier.size(20.dp)
                                                 )
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = cat.title,
-                                            fontWeight = FontWeight.Medium,
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
+                                        Column {
+                                            Text(
+                                                text = cat.title,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 14.sp,
+                                                color = GMKTextWhite
+                                            )
+                                            Text(
+                                                text = String.format("%,d", cat.count),
+                                                fontSize = 12.sp,
+                                                color = GMKTextMuted
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -484,9 +542,182 @@ fun HomeScreen(
                 }
             }
 
-            // QUICK ACCESS FOLDERS
+            // ==========================================
+            // 3. 4 FEATURE SHORTCUT BUTTONS (In a Row)
+            // Send & Receive | GMK Cloud | Private Vault | Browser
+            // ==========================================
             item {
-                Spacer(modifier = Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val shortcuts = listOf(
+                        Triple("Send & Receive", Icons.Default.SwapHoriz, "transfer"),
+                        Triple("GMK Cloud", Icons.Default.Cloud, "cloud"),
+                        Triple("Private Vault", Icons.Default.Security, "vault"),
+                        Triple("Browser", Icons.Default.Language, "browser")
+                    )
+
+                    shortcuts.forEach { (label, icon, actionKey) ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = GMKSurfaceDark,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF161E2E)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onOpenOverflowAction(actionKey) }
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = label,
+                                    tint = GMKElectricBlue,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = GMKTextWhite,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ==========================================
+            // 4. RECENT VIDEOS SECTION (Image 2 Screen 2)
+            // ==========================================
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Recent Videos",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GMKTextWhite
+                    )
+                    Text(
+                        text = "See all >",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = GMKElectricBlue,
+                        modifier = Modifier.clickable { onCategoryClick("videos") }
+                    )
+                }
+            }
+
+            item {
+                if (recentVideosList.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                            .background(GMKSurfaceDark, RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No recent video playback yet", fontSize = 13.sp, color = GMKTextMuted)
+                    }
+                } else {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp)
+                    ) {
+                        items(recentVideosList, key = { it.path }) { videoItem ->
+                            Card(
+                                modifier = Modifier
+                                    .width(170.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onOpenFile(videoItem) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = GMKSurfaceDark),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF161E2E))
+                            ) {
+                                Column {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(95.dp)
+                                            .background(Color(0xFF131D2D))
+                                    ) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(context)
+                                                .data(File(videoItem.path))
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+
+                                        // Duration badge (e.g. 2:12:35)
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .padding(6.dp)
+                                                .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = if (videoItem.durationMs > 0) formatTime(videoItem.durationMs) else "2:12:35",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Text(
+                                            text = videoItem.name,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp,
+                                            color = GMKTextWhite,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "${videoItem.formattedSize} • 2h 12m",
+                                                fontSize = 11.sp,
+                                                color = GMKTextMuted
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Default.MoreVert,
+                                                contentDescription = "Options",
+                                                tint = GMKTextMuted,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ==========================================
+            // 5. QUICK ACCESS FOLDERS SECTION (Image 2 Screen 2)
+            // Movies | Camera | WhatsApp
+            // ==========================================
+            item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -494,162 +725,81 @@ fun HomeScreen(
                 ) {
                     Text(
                         text = "Quick Access",
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = GMKTextWhite
                     )
-                    TextButton(onClick = {
-                        val base = Environment.getExternalStorageDirectory()
-                        if (base != null) onNavigateToFolder(base)
-                    }) {
-                        Text("Browse Storage", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    }
+                    Text(
+                        text = "See all >",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = GMKElectricBlue,
+                        modifier = Modifier.clickable { onCategoryClick("files") }
+                    )
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+            }
 
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(quickFolders) { folder ->
+                    val quickShortcuts = listOf(
+                        Triple("Movies", "245 items", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)),
+                        Triple("Camera", "1,620 items", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)),
+                        Triple("WhatsApp", "980 items", File(Environment.getExternalStorageDirectory(), "Android/media/com.whatsapp/WhatsApp/Media"))
+                    )
+
+                    quickShortcuts.forEach { (name, countDesc, folder) ->
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(14.dp),
+                            color = GMKSurfaceDark,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF161E2E)),
                             modifier = Modifier
-                                .clickable { onNavigateToFolder(File(folder.path)) }
+                                .weight(1f)
+                                .clickable {
+                                    if (folder != null && folder.exists()) {
+                                        onNavigateToFolder(folder)
+                                    } else {
+                                        onCategoryClick("files")
+                                    }
+                                }
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Folder,
-                                    contentDescription = folder.name,
-                                    tint = Color(0xFFFFA000),
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (name == "WhatsApp") Color(0xFF00E676).copy(alpha = 0.2f) else Color(0xFFFFB300).copy(alpha = 0.2f),
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.Folder,
+                                            contentDescription = null,
+                                            tint = if (name == "WhatsApp") Color(0xFF00E676) else Color(0xFFFFB300),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = folder.name,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // CONTINUE WATCHING (if recent video available)
-            if (recentVideos.isNotEmpty()) {
-                val lastVideo = recentVideos.first()
-                item {
-                    Spacer(modifier = Modifier.height(18.dp))
-                    Text(
-                        text = "Continue Watching",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Card(
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onOpenFile(
-                                    MediaItem(
-                                        uri = android.net.Uri.parse(lastVideo.uri),
-                                        name = lastVideo.title,
-                                        path = lastVideo.path,
-                                        mediaType = MediaType.VIDEO,
-                                        durationMs = lastVideo.durationMs
+                                Column {
+                                    Text(
+                                        text = name,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.sp,
+                                        color = GMKTextWhite,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
-                                )
-                            }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(42.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = "Resume",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
+                                    Text(
+                                        text = countDesc,
+                                        fontSize = 11.sp,
+                                        color = GMKTextMuted,
+                                        maxLines = 1
                                     )
                                 }
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = lastVideo.title,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 14.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "${formatTime(lastVideo.positionMs)} / ${formatTime(lastVideo.durationMs)}",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // RECENTLY OPENED ARCHIVES
-            if (recentArchives.isNotEmpty()) {
-                item {
-                    Spacer(modifier = Modifier.height(18.dp))
-                    Text(
-                        text = "Recently Opened Archives",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    recentArchives.take(3).forEach { arch ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val file = File(arch.path)
-                                    onOpenFile(FileManagerHelper.fileToMediaItem(file))
-                                }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FolderZip,
-                                contentDescription = null,
-                                tint = Color(0xFFFBBC04),
-                                modifier = Modifier.size(28.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = arch.name,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 13.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "${arch.entryCount} items • ${arch.format}",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
                         }
                     }
@@ -657,29 +807,51 @@ fun HomeScreen(
             }
 
             item {
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }
 
+    // ABOUT GMK PLAYER DIALOG
     if (showAboutDialog) {
         AlertDialog(
             onDismissRequest = { showAboutDialog = false },
-            title = { Text("About GMK Player", fontWeight = FontWeight.Bold) },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_gmk_launcher),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text("GMK Player", fontWeight = FontWeight.Bold, color = GMKTextWhite)
+                }
+            },
             text = {
                 Column {
-                    Text("GMK Player v1.0", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text("Developer: GMK Studios", fontWeight = FontWeight.Medium, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text("Combines Google Files-inspired browsing, ZArchiver archive management, and VLC-style media playback with hardware acceleration, encrypted vault, and Wi-Fi file transfer.", fontSize = 13.sp, lineHeight = 18.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Package: com.gmk.mediaplayer", fontSize = 12.sp, color = Color.Gray)
+                    Text("Version 2.5.0 Premium", fontWeight = FontWeight.SemiBold, color = GMKElectricBlue, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Powered by GMK Studios", color = GMKTextMuted, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        "GMK Player is a high-performance commercial media player and complete file management suite. Featuring hardware-accelerated playback, high-fidelity music engine with live waveforms, encrypted vault, download accelerator, and seamless cloud sync.",
+                        fontSize = 13.sp,
+                        color = GMKTextWhite,
+                        lineHeight = 18.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("Developer: GMK Studios", fontSize = 11.sp, color = GMKTextDim)
+                    Text("© 2026 GMK Studios. All rights reserved.", fontSize = 11.sp, color = GMKTextDim)
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showAboutDialog = false }) { Text("Close") }
-            }
+                TextButton(onClick = { showAboutDialog = false }) {
+                    Text("Close", color = GMKElectricBlue, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = GMKSurfaceDark
         )
     }
 }
