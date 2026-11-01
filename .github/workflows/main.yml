@@ -21,17 +21,32 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Restore debug keystore from secret
+        env:
+          KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "DEBUG_KEYSTORE_BASE64 secret is available. Decoding to ${GITHUB_WORKSPACE}/debug.keystore..."
+            echo "$KEYSTORE_BASE64" | base64 --decode > "${GITHUB_WORKSPACE}/debug.keystore"
+            chmod 600 "${GITHUB_WORKSPACE}/debug.keystore"
+          elif [ -f "${GITHUB_WORKSPACE}/debug.keystore.base64" ]; then
+            echo "Repository file debug.keystore.base64 is available. Decoding to ${GITHUB_WORKSPACE}/debug.keystore..."
+            base64 --decode "${GITHUB_WORKSPACE}/debug.keystore.base64" > "${GITHUB_WORKSPACE}/debug.keystore"
+            chmod 600 "${GITHUB_WORKSPACE}/debug.keystore"
+          fi
+
+          if [ -f "${GITHUB_WORKSPACE}/debug.keystore" ] && [ -s "${GITHUB_WORKSPACE}/debug.keystore" ]; then
+            echo "Debug keystore created successfully and is non-empty."
+          fi
+
       - name: Ensure consistent debug keystore
         run: |
-          if [ ! -f "debug.keystore" ] && [ -f "debug.keystore.base64" ]; then
-            echo "Restoring canonical debug.keystore from debug.keystore.base64"
-            base64 -d debug.keystore.base64 > debug.keystore
-          fi
-          if [ ! -f "debug.keystore" ]; then
-            echo "Error: Canonical debug.keystore is missing. Refusing to generate a random key to avoid signature mismatch."
+          KEYSTORE_FILE="${GITHUB_WORKSPACE}/debug.keystore"
+          if [ ! -f "$KEYSTORE_FILE" ] || [ ! -s "$KEYSTORE_FILE" ]; then
+            echo "::error::Canonical debug.keystore is missing. Refusing to generate a random key to avoid signature mismatch."
             exit 1
           fi
-          echo "Keystore verified successfully."
+          echo "Canonical debug.keystore is present and verified. Building with consistent signing identity."
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
